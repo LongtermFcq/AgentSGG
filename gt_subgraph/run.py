@@ -23,8 +23,9 @@ SPLIT = {}
 for sp in ["train", "validation"]:
     f = os.path.join(ROOT, "3DSSG_subset", f"{sp}_scans.txt")
     if os.path.exists(f):
-        for line in open(f):
-            SPLIT[line.strip()] = sp
+        with open(f) as fh:
+            for line in fh:
+                SPLIT[line.strip()] = sp
 
 DEFAULT_SCANS = [
     "7272e16c-a01b-20f6-8961-a0927b4a7629",

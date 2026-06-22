@@ -52,4 +52,5 @@ def materialize(out, t):
 
 
 def save(out, path):
-    json.dump(out, open(path, "w"), indent=2)
+    with open(path, "w") as f:
+        json.dump(out, f, indent=2)

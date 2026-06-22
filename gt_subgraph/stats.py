@@ -40,6 +40,8 @@ def run(scan_id):
     inst_pix = np.array(s["inst_pix"])
 
     def q(a, ps):
+        if a.size == 0:
+            return {p: None for p in ps}
         return {p: float(np.percentile(a, p)) for p in ps}
 
     report = {
@@ -47,11 +49,13 @@ def run(scan_id):
         "n_frames": len(frames),
         "n_instances": len(total_area),
         "single_area_ratio": {
-            "n": int(single.size), "max": float(single.max()),
+            "n": int(single.size),
+            "max": float(single.max()) if single.size else None,
             "pct": q(single, [50, 75, 90, 95, 99]),
         },
         "cumulative_area_ratio": {
-            "n": int(cum.size), "max": float(cum.max()),
+            "n": int(cum.size),
+            "max": float(cum.max()) if cum.size else None,
             "pct": q(cum, [50, 75, 90, 95, 99]),
         },
         "inst_pixels_per_frame": {
@@ -69,7 +73,8 @@ def run(scan_id):
     fig.tight_layout()
     p = os.path.join(OUT, f"stats_{scan_id[:8]}.png")
     fig.savefig(p, dpi=90)
-    json.dump(report, open(os.path.join(OUT, f"stats_{scan_id[:8]}.json"), "w"), indent=2)
+    with open(os.path.join(OUT, f"stats_{scan_id[:8]}.json"), "w") as f:
+        json.dump(report, f, indent=2)
     print("saved", p)
 
 
