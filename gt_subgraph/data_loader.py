@@ -12,6 +12,7 @@ Verified facts about this dataset layout (checked on the sample scans):
     [subjectId, objectId, predId, predName].
 """
 import json
+import io
 import os
 import warnings
 import zipfile
@@ -90,9 +91,13 @@ def load_intrinsics(scan_dir):
     """Read color intrinsics K (3x3) and resolution from sequence/_info.txt."""
     info_path = os.path.join(scan_dir, "sequence", "_info.txt")
     if not os.path.exists(info_path):
-        # fall back to reading from the zip
+        # Fall back to reading from the zip. Some archives store files at the
+        # root, others under a sequence/ prefix.
         with zipfile.ZipFile(os.path.join(scan_dir, "sequence.zip")) as z:
-            txt = z.read("_info.txt").decode()
+            info_names = [n for n in z.namelist() if os.path.basename(n) == "_info.txt"]
+            if not info_names:
+                raise FileNotFoundError(f"_info.txt not found in {scan_dir}/sequence.zip")
+            txt = z.read(info_names[0]).decode()
     else:
         txt = open(info_path).read()
     info = {}
@@ -113,14 +118,29 @@ def iter_frames(scan_dir):
     """Yield (frame_id_str, pose 4x4 cam->world) in ascending frame order.
     Frames with missing/invalid pose are skipped here (caller re-indexes t)."""
     seq = os.path.join(scan_dir, "sequence")
-    pose_files = sorted(f for f in os.listdir(seq) if f.endswith(".pose.txt"))
-    for pf in pose_files:
-        fid = pf.replace(".pose.txt", "")
-        pose = np.loadtxt(os.path.join(seq, pf), dtype=np.float64)
-        if pose.shape != (4, 4) or not np.all(np.isfinite(pose)):
-            continue
-        # 3RScan marks invalid poses with -inf; isfinite check above handles it.
-        yield fid, pose
+    if os.path.isdir(seq):
+        pose_files = sorted(f for f in os.listdir(seq) if f.endswith(".pose.txt"))
+        for pf in pose_files:
+            fid = pf.replace(".pose.txt", "")
+            pose = np.loadtxt(os.path.join(seq, pf), dtype=np.float64)
+            if pose.shape != (4, 4) or not np.all(np.isfinite(pose)):
+                continue
+            # 3RScan marks invalid poses with -inf; isfinite check above handles it.
+            yield fid, pose
+        return
+
+    zip_path = os.path.join(scan_dir, "sequence.zip")
+    with zipfile.ZipFile(zip_path) as z:
+        pose_names = sorted(
+            n for n in z.namelist() if os.path.basename(n).endswith(".pose.txt")
+        )
+        for name in pose_names:
+            fid = os.path.basename(name).replace(".pose.txt", "")
+            txt = z.read(name).decode()
+            pose = np.loadtxt(io.StringIO(txt), dtype=np.float64)
+            if pose.shape != (4, 4) or not np.all(np.isfinite(pose)):
+                continue
+            yield fid, pose
 
 
 def load_relationships(dataset_root, scan_id, split=None):

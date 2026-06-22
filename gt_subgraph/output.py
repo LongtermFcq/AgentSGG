@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 
 
-def build_output(scan_id, res, edges, labels, cfg, relations_total, missing):
+def build_output(scan_id, res, edges, labels, cfg, id_report):
     nodes = {}
     for i, ct in res["commit_time"].items():
         if ct is None:
@@ -33,10 +33,7 @@ def build_output(scan_id, res, edges, labels, cfg, relations_total, missing):
              "object": str(e["object"]), "activation_time": e["activation_time"]}
             for e in edges
         ],
-        "id_check": {
-            "relations_total": relations_total,
-            "relations_with_missing_endpoint": missing,
-        },
+        "id_check": id_report,
         "debug": {
             "uncommitted_renderable": {
                 str(i): {

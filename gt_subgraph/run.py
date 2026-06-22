@@ -35,15 +35,49 @@ DEFAULT_SCANS = [
 ]
 
 
-def id_check(scan_id, relationships, inst_ids, labels):
-    """Phase 0 step 6: report endpoint coverage + readable spot-check."""
+def id_check(scan_id, relationships, inst_ids, labels, renderable_ids=None):
+    """Phase 0 step 6: endpoint coverage + readable spot-check.
+
+    `inst_ids` is the semseg objectId set. Renderability is reported separately
+    so annotation-only objects do not get mislabeled as ID mismatches.
+    """
     endpoints = {r[0] for r in relationships} | {r[1] for r in relationships}
-    missing = sorted(endpoints - inst_ids)
+    missing_records = []
+    for r in relationships:
+        missing_ids = [x for x in (r[0], r[1]) if x not in inst_ids]
+        if missing_ids:
+            missing_records.append({
+                "scan_id": scan_id,
+                "relation": list(r),
+                "missing_ids": missing_ids,
+            })
+    missing_endpoint_ids = sorted(endpoints - inst_ids)
     print(f"  [id_check] relations={len(relationships)} "
-          f"endpoints={len(endpoints)} missing={len(missing)} {missing if missing else ''}")
+          f"endpoints={len(endpoints)} missing_relation_rows={len(missing_records)} "
+          f"missing_endpoint_ids={missing_endpoint_ids if missing_endpoint_ids else []}")
+    print("  [id_check] raw relation samples:", [list(r) for r in relationships[:2]])
+    for rec in missing_records[:10]:
+        print(f"    MISSING scan={scan_id} relation={rec['relation']} "
+              f"missing_ids={rec['missing_ids']}")
     for r in relationships[:5]:
         s, o, pid, pn = r
         print(f"    {labels.get(s,'?')}(id={s}) --{pn}--> {labels.get(o,'?')}(id={o})")
+
+    report = {
+        "relations_total": len(relationships),
+        "relations_with_missing_endpoint": len(missing_records),
+        "missing_endpoint_ids": missing_endpoint_ids,
+        "missing_relation_samples": missing_records[:20],
+    }
+    if renderable_ids is not None:
+        report["relation_endpoint_ids_without_renderable_geometry"] = sorted(
+            int(x) for x in endpoints - set(renderable_ids) if x in inst_ids
+        )
+    if relationships and len(missing_records) / len(relationships) > 0.05:
+        raise ValueError(
+            f"[{scan_id}] too many relationship rows have missing semseg endpoints: "
+            f"{len(missing_records)}/{len(relationships)}")
+    return report
 
 
 def run_scan(scan_id, cfg):
@@ -70,10 +104,11 @@ def run_scan(scan_id, cfg):
     summ = mi.summarize_diagnostics(diag)
     annot_only = [(oid, r["label"], r["vertex_count"])
                   for oid, r in diag.items() if r["face_count"] == 0 and r["vertex_count"] > 0]
-    inst_ids = set(total_area.keys())
+    inst_ids = set(labels.keys())
+    renderable_ids = set(total_area.keys())
     print(f"  [phase0] semseg_inst={summ['n_instances']} has_geometry="
           f"{summ['has_geometry']} annotation_only={summ['annotation_only']} "
-          f"empty={summ['empty']}; all-3-differ faces={n_dis}, "
+          f"empty={summ['empty']}; mixed-instance faces={n_dis}, "
           f"PLY crosscheck disagree={dis:.4%}")
     if annot_only:
         print(f"  [phase0] annotation-only (no mesh faces, never committable): "
@@ -81,7 +116,7 @@ def run_scan(scan_id, cfg):
 
     relationships, rel_file = dl.load_relationships(ROOT, scan_id, split)
     print(f"  [rel] {len(relationships)} relations from {rel_file}")
-    id_check(scan_id, relationships, inst_ids, labels)
+    id_report = id_check(scan_id, relationships, inst_ids, labels, renderable_ids)
 
     # Phase A
     K, W, H, _ = dl.load_intrinsics(scan_dir)
@@ -90,7 +125,7 @@ def run_scan(scan_id, cfg):
                         frames, K, W, H, cfg, collect_stats=False)
 
     # Phase B
-    edges, missing = gb.activate_edges(relationships, res["commit_time"])
+    edges, missing = gb.activate_edges(relationships, res["commit_time"], inst_ids)
 
     n_committed = sum(1 for v in res["commit_time"].values() if v is not None)
     n_active = sum(1 for e in edges if e["activation_time"] is not None)
@@ -98,7 +133,7 @@ def run_scan(scan_id, cfg):
     for v in res["commit_meta"].values():
         if v:
             reasons[v["reason"]] = reasons.get(v["reason"], 0) + 1
-    print(f"  [phaseA] committed {n_committed}/{len(inst_ids)} nodes, reasons={reasons}")
+    print(f"  [phaseA] committed {n_committed}/{len(renderable_ids)} renderable nodes, reasons={reasons}")
     print(f"  [phaseB] active edges {n_active}/{len(edges)} (missing endpoints={missing})")
     unc = res["debug_uncommitted"]
     if unc:
@@ -111,7 +146,7 @@ def run_scan(scan_id, cfg):
                   f"filt_pixmin={d['filtered_by_pix_min_count']} "
                   f"filt_visratio={d['filtered_by_vis_ratio_count']}")
 
-    out = op.build_output(scan_id, res, edges, labels, cfg, len(relationships), missing)
+    out = op.build_output(scan_id, res, edges, labels, cfg, id_report)
     path = os.path.join(OUT, f"gt_{scan_id[:8]}.json")
     op.save(out, path)
 
@@ -122,13 +157,14 @@ def run_scan(scan_id, cfg):
     print("  [timeline] first commits:",
           [(t, lbl) for t, _, lbl, _ in committed[:6]])
     T = res["num_processed_frames"]
-    for t in [T // 4, T // 2, T - 1]:
-        nodes_t, edges_t = op.materialize(out, t)
-        bad = sum(1 for e in edges_t
-                  if nodes_t.get(e["subject"], {}).get("commit_time", 1e9) > t
-                  or nodes_t.get(e["object"], {}).get("commit_time", 1e9) > t)
-        print(f"    materialize(t={t}): {len(nodes_t)} nodes, {len(edges_t)} edges, "
-              f"edge-before-endpoint violations={bad}")
+    if T > 0:
+        for t in sorted(set([T // 4, T // 2, T - 1])):
+            nodes_t, edges_t = op.materialize(out, t)
+            bad = sum(1 for e in edges_t
+                      if nodes_t.get(e["subject"], {}).get("commit_time", 1e9) > t
+                      or nodes_t.get(e["object"], {}).get("commit_time", 1e9) > t)
+            print(f"    materialize(t={t}): {len(nodes_t)} nodes, {len(edges_t)} edges, "
+                  f"edge-before-endpoint violations={bad}")
     print(f"  saved {path}")
     return out
 

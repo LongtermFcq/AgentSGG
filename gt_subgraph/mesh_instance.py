@@ -8,7 +8,7 @@ def build_face_to_instance(faces, seg_indices, seg_to_instance):
     """vertex -> segment (seg_indices) -> instance (seg_to_instance), then a face
     takes the majority instance of its 3 vertices. Returns:
       face_to_instance (n_faces,) int64  (BG=0 where unlabeled)
-      n_disagree: faces whose 3 verts disagreed (debug stat)
+      n_disagree: faces whose 3 vertex instances are not all identical
     """
     vert_inst = np.array(
         [seg_to_instance.get(int(s), BG) for s in seg_indices], dtype=np.int64
@@ -23,6 +23,7 @@ def build_face_to_instance(faces, seg_indices, seg_to_instance):
     all_same = same01 & same12
     face_inst[all_same] = fv[all_same, 0]
     rest = ~all_same
+    n_disagree = int(np.count_nonzero(rest))
     for idx in np.nonzero(rest)[0]:
         a, b, c = fv[idx]
         if a == b or a == c:
@@ -32,7 +33,6 @@ def build_face_to_instance(faces, seg_indices, seg_to_instance):
         else:
             # all three differ -> pick vertex[0] deterministically
             face_inst[idx] = a
-            n_disagree += 1
     return face_inst, n_disagree
 
 
@@ -48,7 +48,10 @@ def total_area_per_instance(face_inst, face_area):
     for inst in np.unique(face_inst):
         if inst == BG:
             continue
-        out[int(inst)] = float(face_area[face_inst == inst].sum())
+        area = float(face_area[face_inst == inst].sum())
+        if area <= 0.0:
+            continue
+        out[int(inst)] = area
     return out
 
 

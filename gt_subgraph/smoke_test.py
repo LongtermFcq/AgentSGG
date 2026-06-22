@@ -4,8 +4,10 @@ Loads one scan, builds face_to_instance, renders a few frames, overlays the
 instance-id buffer onto the RGB frame, and reports visible instances. This
 validates: mesh/seg alignment, occlusion, coordinate/units, and the renderer.
 """
+import io
 import os
 import sys
+import zipfile
 import numpy as np
 from PIL import Image
 
@@ -23,6 +25,17 @@ os.makedirs(OUT, exist_ok=True)
 def color_for(inst):
     rng = np.random.RandomState(inst * 9973 + 7)
     return rng.randint(60, 256, size=3)
+
+
+def load_color(scan_dir, fid):
+    rgb_path = os.path.join(scan_dir, "sequence", f"{fid}.color.jpg")
+    if os.path.exists(rgb_path):
+        return Image.open(rgb_path).convert("RGB")
+    with zipfile.ZipFile(os.path.join(scan_dir, "sequence.zip")) as z:
+        names = [n for n in z.namelist() if os.path.basename(n) == f"{fid}.color.jpg"]
+        if not names:
+            raise FileNotFoundError(f"{fid}.color.jpg not found in sequence or sequence.zip")
+        return Image.open(io.BytesIO(z.read(names[0]))).convert("RGB")
 
 
 def main():
@@ -63,8 +76,7 @@ def main():
         print("  top:", top)
 
         # overlay
-        rgb_path = os.path.join(scan_dir, "sequence", f"{fid}.color.jpg")
-        rgb = np.array(Image.open(rgb_path).convert("RGB").resize((W, H)))
+        rgb = np.array(load_color(scan_dir, fid).resize((W, H)))
         overlay = rgb.copy()
         for inst in vis:
             overlay[inst_buf == inst] = color_for(int(inst))

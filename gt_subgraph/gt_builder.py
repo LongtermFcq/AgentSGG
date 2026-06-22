@@ -21,11 +21,16 @@ renderable instances can be diagnosed (never projected / only corner / too few
 pixels / area evidence insufficient).
 """
 from dataclasses import dataclass
+import warnings
 import numpy as np
 from tqdm import tqdm
 
-from renderer import FaceRenderer, InstanceRenderer
-from mesh_instance import BG
+try:
+    from .renderer import FaceRenderer, InstanceRenderer
+    from .mesh_instance import BG
+except ImportError:  # script execution from gt_subgraph/
+    from renderer import FaceRenderer, InstanceRenderer
+    from mesh_instance import BG
 
 
 @dataclass
@@ -69,9 +74,16 @@ def build_scan(verts, faces, face_inst, face_area, total_area,
     stats = {"single": [], "cumulative": [], "inst_pix": [], "vis_ratio": []} \
         if collect_stats else None
 
-    for t, (fid, pose) in enumerate(tqdm(frames, desc="frames", leave=False)):
+    processed = 0
+    for fid, pose in tqdm(frames, desc="frames", leave=False):
+        try:
+            prim = rend.render_face_ids(K_intr, pose, W, H)  # (H,W) face id, -1 = miss
+        except Exception as exc:
+            warnings.warn(f"skipping frame {fid}: render failed: {exc}", stacklevel=2)
+            continue
+        t = processed
+        processed += 1
         t_to_frame[t] = fid
-        prim = rend.render_face_ids(K_intr, pose, W, H)  # (H,W) face id, -1 = miss
         hit = prim >= 0
         flat = prim[hit]
         if flat.size == 0:
@@ -160,21 +172,27 @@ def build_scan(verts, faces, face_inst, face_area, total_area,
         "t_to_frame": t_to_frame,
         "commit_time": commit_time,
         "commit_meta": commit_meta,
-        "num_processed_frames": len(frames),
+        "num_processed_frames": processed,
         "debug_uncommitted": uncommitted,
         "stats": stats,
     }
 
 
-def activate_edges(relationships, commit_time):
+def activate_edges(relationships, commit_time, known_instance_ids=None):
     """Phase B: edge activation = max(commit_time[subj], commit_time[obj]).
-    Keeps direction + multi-edges; logs endpoints that never commit / are missing."""
+    Keeps direction + multi-edges. `known_instance_ids` should be the semseg
+    instance-id set, so annotation-only objects are treated as known but
+    uncommitted instead of being reported as ID mismatches.
+    """
+    known = set(commit_time) if known_instance_ids is None else set(known_instance_ids)
     edges = []
     missing = 0
     for subj, obj, pid, pname in relationships:
+        subj_known = subj in known
+        obj_known = obj in known
         ct_i = commit_time.get(subj)
         ct_j = commit_time.get(obj)
-        if subj not in commit_time or obj not in commit_time:
+        if not subj_known or not obj_known:
             missing += 1
             act = None
         elif ct_i is None or ct_j is None:
