@@ -37,6 +37,22 @@ def build_output(scan_id, res, edges, labels, cfg, relations_total, missing):
             "relations_total": relations_total,
             "relations_with_missing_endpoint": missing,
         },
+        "debug": {
+            "uncommitted_renderable": {
+                str(i): {
+                    "label": labels.get(int(i), "?"),
+                    "max_pix_vis": d["max_pix_vis"],
+                    "max_pix_full": d["max_pix_full"],
+                    "max_vis_ratio": round(d["max_vis_ratio"], 4),
+                    "max_single_area_ratio": round(d["max_single_area_ratio"], 4),
+                    "max_cumulative_area_ratio": round(d["max_cumulative_area_ratio"], 4),
+                    "valid_observation_frame_count": d["valid_observation_frame_count"],
+                    "filtered_by_pix_min_count": d["filtered_by_pix_min_count"],
+                    "filtered_by_vis_ratio_count": d["filtered_by_vis_ratio_count"],
+                }
+                for i, d in res["debug_uncommitted"].items()
+            }
+        },
     }
     return out
 

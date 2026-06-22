@@ -100,6 +100,16 @@ def run_scan(scan_id, cfg):
             reasons[v["reason"]] = reasons.get(v["reason"], 0) + 1
     print(f"  [phaseA] committed {n_committed}/{len(inst_ids)} nodes, reasons={reasons}")
     print(f"  [phaseB] active edges {n_active}/{len(edges)} (missing endpoints={missing})")
+    unc = res["debug_uncommitted"]
+    if unc:
+        print(f"  [debug] {len(unc)} uncommitted renderable instance(s):")
+        for i, d in unc.items():
+            print(f"    id={i} {labels.get(i,'?')}: max_pix_vis={d['max_pix_vis']} "
+                  f"max_pix_full={d['max_pix_full']} max_vis_ratio={d['max_vis_ratio']:.3f} "
+                  f"max_cum={d['max_cumulative_area_ratio']:.3f} "
+                  f"valid_frames={d['valid_observation_frame_count']} "
+                  f"filt_pixmin={d['filtered_by_pix_min_count']} "
+                  f"filt_visratio={d['filtered_by_vis_ratio_count']}")
 
     out = op.build_output(scan_id, res, edges, labels, cfg, len(relationships), missing)
     path = os.path.join(OUT, f"gt_{scan_id[:8]}.json")
@@ -125,8 +135,9 @@ def run_scan(scan_id, cfg):
 
 def main():
     scans = sys.argv[1:] or DEFAULT_SCANS
-    cfg = gb.Config(TAU_INST_PIX=400, TAU_FACE_PIX=2, TAU_STRONG=0.6,
-                    TAU_COMMIT=0.4, ENABLE_PERSIST=False)
+    cfg = gb.Config(TAU_INST_PIX_MIN=20, TAU_INST_VIS_RATIO=0.10, TAU_FACE_PIX=2,
+                    TAU_STRONG=0.6, TAU_COMMIT=0.4,
+                    ENABLE_PERSIST=True, K=3, TAU_PERSIST=0.10)
     print("config:", cfg)
     for sc in scans:
         run_scan(sc, cfg)

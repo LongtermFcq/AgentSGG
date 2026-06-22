@@ -30,15 +30,18 @@ def run(scan_id):
     K, W, H, _ = dl.load_intrinsics(scan_dir)
     frames = list(dl.iter_frames(scan_dir))
 
-    # collect-stats pass with permissive thresholds so we record everything
-    cfg = gb.Config(TAU_INST_PIX=1, TAU_FACE_PIX=2, TAU_STRONG=2.0,
-                    TAU_COMMIT=2.0, ENABLE_PERSIST=False)
+    # collect-stats pass with permissive thresholds so we record everything.
+    # TAU_INST_VIS_RATIO=0 -> tier2 never filters, so vis_ratio is collected for
+    # every touched instance with pfull>0 (needed to pick the real threshold).
+    cfg = gb.Config(TAU_INST_PIX_MIN=1, TAU_INST_VIS_RATIO=0.0, TAU_FACE_PIX=2,
+                    TAU_STRONG=2.0, TAU_COMMIT=2.0, ENABLE_PERSIST=False)
     res = gb.build_scan(verts, faces, face_inst, face_area, total_area,
                         frames, K, W, H, cfg, collect_stats=True)
     s = res["stats"]
     single = np.array(s["single"])
     cum = np.array(s["cumulative"])
     inst_pix = np.array(s["inst_pix"])
+    vis_ratio = np.array(s["vis_ratio"])
 
     def q(a, ps):
         if a.size == 0:
@@ -61,15 +64,20 @@ def run(scan_id):
         },
         "inst_pixels_per_frame": {
             "n": int(inst_pix.size),
-            "pct": q(inst_pix, [5, 10, 25, 50, 75, 90]),
+            "pct": q(inst_pix, [1, 5, 10, 25, 50, 75, 90]),
+        },
+        "vis_ratio": {
+            "n": int(vis_ratio.size),
+            "pct": q(vis_ratio, [1, 5, 10, 25, 50, 75, 90]),
         },
     }
     print(json.dumps(report, indent=2))
 
-    fig, ax = plt.subplots(1, 3, figsize=(15, 4))
+    fig, ax = plt.subplots(1, 4, figsize=(20, 4))
     ax[0].hist(single, bins=50); ax[0].set_title("single_area_ratio")
     ax[1].hist(cum, bins=50); ax[1].set_title("cumulative_area_ratio")
     ax[2].hist(np.log10(inst_pix + 1), bins=50); ax[2].set_title("log10 inst pixels/frame")
+    ax[3].hist(vis_ratio, bins=50); ax[3].set_title("vis_ratio (pix_vis/pix_full)")
     fig.suptitle(f"{scan_id}  ({len(total_area)} inst, {len(frames)} frames)")
     fig.tight_layout()
     p = os.path.join(OUT, f"stats_{scan_id[:8]}.png")
