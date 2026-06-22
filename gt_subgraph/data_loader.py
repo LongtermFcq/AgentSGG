@@ -13,20 +13,44 @@ Verified facts about this dataset layout (checked on the sample scans):
 """
 import json
 import os
+import warnings
 import zipfile
 import numpy as np
-import trimesh
 
 
 def load_mesh(scan_dir):
-    """Load OBJ keeping original vertex/face order (process=False is critical:
-    it must stay aligned with segIndices and the PLY)."""
+    """Parse the OBJ manually, preserving EXACTLY its vertex list and order.
+
+    Do NOT use trimesh/open3d loaders here: they may drop/merge vertices (e.g.
+    trimesh dropped 4 of 43877 verts on one sample), which silently breaks
+    alignment with segIndices (per-vertex) and the PLY. We keep all `v` lines in
+    order and read the first (geometry) index of each `f` corner (1-based)."""
     obj_path = os.path.join(scan_dir, "mesh.refined.v2.obj")
-    mesh = trimesh.load(obj_path, process=False, maintain_order=True)
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
-    verts = np.asarray(mesh.vertices, dtype=np.float64)
-    faces = np.asarray(mesh.faces, dtype=np.int64)
+    verts = []
+    faces = []
+    n_ngon = 0
+    with open(obj_path) as f:
+        for line in f:
+            if line.startswith("v "):
+                verts.append(line[2:].split()[:3])
+            elif line.startswith("f "):
+                parts = line[2:].split()
+                # f v/vt/vn ... -> take geometry index (before first '/')
+                indices = [p.split("/", 1)[0] for p in parts]
+                if len(indices) < 3:
+                    continue
+                if len(indices) > 3:
+                    n_ngon += 1
+                # Fan-triangulate quads/n-gons; downstream expects triangles.
+                for i in range(1, len(indices) - 1):
+                    faces.append([indices[0], indices[i], indices[i + 1]])
+    if n_ngon:
+        warnings.warn(
+            f"Triangulated {n_ngon} non-triangular face(s) in {obj_path}",
+            stacklevel=2,
+        )
+    verts = np.array(verts, dtype=np.float64)
+    faces = np.array(faces, dtype=np.int64) - 1  # OBJ is 1-indexed
     return verts, faces
 
 

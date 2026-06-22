@@ -14,9 +14,9 @@ import data_loader as dl
 import mesh_instance as mi
 from renderer import FaceRenderer
 
-ROOT = "/home/data16t1/fengchangqun/3RScan_Demo"
+ROOT = "/home/data16t1/fengchangqun/AgentSGG/3RScan"
 SCAN = "7272e16c-a01b-20f6-8961-a0927b4a7629"
-OUT = os.path.join(ROOT, "gt_subgraph", "out")
+OUT = os.path.join("/home/data16t1/fengchangqun/AgentSGG", "gt_subgraph", "out")
 os.makedirs(OUT, exist_ok=True)
 
 

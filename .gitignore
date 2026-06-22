@@ -10,12 +10,12 @@ env/
 .claude/
 .cursor/
 *.md
-3DSSG_subset/
 *.txt
 *.sh
 *.json
 *.js
-f62fd5fd-9a3f-2f44-883a-1e5cf819608e/
-7272e161-a01b-20f6-8b5a-0b97efeb6545/
-7272e16c-a01b-20f6-8961-a0927b4a7629/
+out/
+3RScan/
+history/
+
 
