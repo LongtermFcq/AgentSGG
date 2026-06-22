@@ -142,3 +142,52 @@ def load_relationships(dataset_root, scan_id, split=None):
             if s["scan"] == scan_id:
                 return [tuple(r) for r in s["relationships"]], fn
     return [], None
+
+
+def validate_invariants(verts, faces, seg_indices, ply_objid, scan_id=""):
+    """Loader-level invariants (Phase 0 prerequisite). Hard-fails on violations
+    that would silently corrupt face_to_instance; returns a stats dict otherwise.
+
+    Checks (per handoff doc):
+      (a) raw_obj_vertex_count == len(segIndices) == ply_vertex_count
+      (b) max(face_index) < raw_obj_vertex_count  (and min >= 0)
+      (c) num_faces reasonable (non-zero, not absurdly large vs verts)
+    """
+    n_v = len(verts)
+    n_seg = len(seg_indices)
+    n_ply = len(ply_objid)
+    n_f = len(faces)
+    stats = {"obj_vertices": n_v, "seg_indices": n_seg,
+             "ply_vertices": n_ply, "faces": n_f}
+    # (a) three vertex counts must agree
+    if not (n_v == n_seg == n_ply):
+        raise ValueError(
+            f"[{scan_id}] vertex count mismatch: obj={n_v} seg={n_seg} ply={n_ply} "
+            "-- face_to_instance alignment would be corrupted; aborting.")
+    # (b) face indices in range [0, n_v)
+    if n_f == 0:
+        raise ValueError(f"[{scan_id}] parsed 0 faces -- OBJ has no 'f' lines?")
+    fmin = int(faces.min())
+    fmax = int(faces.max())
+    if fmin < 0 or fmax >= n_v:
+        raise ValueError(
+            f"[{scan_id}] face index out of range: min={fmin} max={fmax} nverts={n_v}")
+    stats["face_index_min"] = fmin
+    stats["face_index_max"] = fmax
+    # (c) reasonable face count: triangles should be a sane multiple of verts.
+    # 3RScan refined meshes have many unreferenced annotation verts, so faces can
+    # be < verts; flag only gross anomalies (e.g. >8x verts or zero).
+    ratio = n_f / max(n_v, 1)
+    stats["faces_per_vert"] = round(ratio, 3)
+    if ratio > 8.0:
+        warnings.warn(
+            f"[{scan_id}] suspiciously many faces: {n_f} faces / {n_v} verts "
+            f"(ratio={ratio:.2f}) -- check OBJ parsing",
+            stacklevel=2)
+    # how many verts are actually referenced by >=1 face (annotation-only verts
+    # are expected in 3RScan but worth reporting).
+    referenced = np.zeros(n_v, dtype=bool)
+    referenced[faces.ravel()] = True
+    stats["verts_referenced"] = int(referenced.sum())
+    stats["verts_unreferenced"] = int((~referenced).sum())
+    return stats

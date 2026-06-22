@@ -17,6 +17,7 @@ import output as op
 
 ROOT = "/home/data16t1/fengchangqun/AgentSGG/3RScan"
 OUT = os.path.join("/home/data16t1/fengchangqun/AgentSGG", "gt_subgraph", "out")
+os.makedirs(OUT, exist_ok=True)
 
 # split lookup so we read relationships from the right file (and record split)
 SPLIT = {}
@@ -54,14 +55,29 @@ def run_scan(scan_id, cfg):
     verts, faces = dl.load_mesh(scan_dir)
     seg_indices = dl.load_segs(scan_dir)
     seg_to_instance, labels = dl.load_semseg(scan_dir)
+    ply = dl.load_ply_objectid(scan_dir, len(verts))
+    inv = dl.validate_invariants(verts, faces, seg_indices, ply, scan_id)
+    print(f"  [invariant] obj_v={inv['obj_vertices']} seg={inv['seg_indices']} "
+          f"ply={inv['ply_vertices']} faces={inv['faces']} "
+          f"(max_face_idx={inv['face_index_max']}, refs {inv['verts_referenced']}/"
+          f"{inv['obj_vertices']} verts, {inv['faces_per_vert']} f/v)")
     face_inst, n_dis = mi.build_face_to_instance(faces, seg_indices, seg_to_instance)
     face_area = mi.compute_face_areas(verts, faces)
     total_area = mi.total_area_per_instance(face_inst, face_area)
-    ply = dl.load_ply_objectid(scan_dir, len(verts))
     dis = mi.crosscheck_with_ply(face_inst, faces, ply)
+    diag = mi.instance_diagnostics(face_inst, face_area, seg_indices,
+                                   seg_to_instance, faces, labels)
+    summ = mi.summarize_diagnostics(diag)
+    annot_only = [(oid, r["label"], r["vertex_count"])
+                  for oid, r in diag.items() if r["face_count"] == 0 and r["vertex_count"] > 0]
     inst_ids = set(total_area.keys())
-    print(f"  [phase0] {len(inst_ids)} instances, all-3-differ faces={n_dis}, "
+    print(f"  [phase0] semseg_inst={summ['n_instances']} has_geometry="
+          f"{summ['has_geometry']} annotation_only={summ['annotation_only']} "
+          f"empty={summ['empty']}; all-3-differ faces={n_dis}, "
           f"PLY crosscheck disagree={dis:.4%}")
+    if annot_only:
+        print(f"  [phase0] annotation-only (no mesh faces, never committable): "
+              + ", ".join(f"{lbl}(id={oid},v={vc})" for oid, lbl, vc in annot_only))
 
     relationships, rel_file = dl.load_relationships(ROOT, scan_id, split)
     print(f"  [rel] {len(relationships)} relations from {rel_file}")

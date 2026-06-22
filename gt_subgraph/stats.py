@@ -16,6 +16,7 @@ import gt_builder as gb
 
 ROOT = "/home/data16t1/fengchangqun/AgentSGG/3RScan"
 OUT = os.path.join("/home/data16t1/fengchangqun/AgentSGG", "gt_subgraph", "out")
+os.makedirs(OUT, exist_ok=True)
 
 
 def run(scan_id):

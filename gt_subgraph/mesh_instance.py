@@ -63,3 +63,55 @@ def crosscheck_with_ply(face_inst, faces, ply_objid):
     mask = (face_inst != BG) | (ply_face != BG)
     disagree = np.sum(face_inst[mask] != ply_face[mask])
     return disagree / max(mask.sum(), 1)
+
+
+def vertex_to_instance(seg_indices, seg_to_instance):
+    """Per-vertex instance id via the semseg->segs->vertex chain. BG where unmapped."""
+    return np.array(
+        [seg_to_instance.get(int(s), BG) for s in seg_indices], dtype=np.int64
+    )
+
+
+def instance_diagnostics(face_inst, face_area, seg_indices, seg_to_instance,
+                         faces, instance_label):
+    """Per-instance geometry coverage for ALL semseg instances (including ones
+    with no mesh faces). For each objectId report:
+      label, vertex_count (via semseg chain), vertex_referenced (subset that is
+      actually used by >=1 face), face_count, total_area.
+
+    This separates three cases that total_area_per_instance alone conflates:
+      - normal:       has faces + area  -> renderable, committable
+      - annotation-only: vertices exist but none referenced by faces -> no
+                        surface, can NEVER be rendered/committed (common in
+                        3RScan for lamps/lights/small items the mesh didn't
+                        reconstruct). NOT a bug.
+      - truly empty:  no vertices at all
+    """
+    vinst = vertex_to_instance(seg_indices, seg_to_instance)
+    referenced = np.zeros(len(seg_indices), dtype=bool)
+    referenced[faces.ravel()] = True
+    rows = {}
+    for oid in sorted(instance_label.keys()):
+        vmask = vinst == oid
+        rows[int(oid)] = {
+            "label": instance_label[oid],
+            "vertex_count": int(vmask.sum()),
+            "vertex_referenced": int((vmask & referenced).sum()),
+            "face_count": int((face_inst == oid).sum()),
+            "total_area": float(face_area[face_inst == oid].sum()),
+        }
+    return rows
+
+
+def summarize_diagnostics(rows):
+    """Roll up instance_diagnostics rows into counts for a quick log line."""
+    n = len(rows)
+    has_geom = sum(1 for r in rows.values() if r["face_count"] > 0)
+    annot_only = sum(1 for r in rows.values()
+                     if r["face_count"] == 0 and r["vertex_count"] > 0)
+    empty = sum(1 for r in rows.values()
+                if r["face_count"] == 0 and r["vertex_count"] == 0)
+    return {
+        "n_instances": n, "has_geometry": has_geom,
+        "annotation_only": annot_only, "empty": empty,
+    }
