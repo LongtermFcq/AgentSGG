@@ -24,19 +24,11 @@ import data_loader as dl
 import mesh_instance as mi
 import output as op
 import visualize as viz
-from paths import ROOT, DEMO_VIZ, DEFAULT_SCANS, gt_json_path, ensure_demo_dirs
+from paths import ROOT, DEMO_VIZ, DEFAULT_SCANS, gt_json_path, ensure_demo_dirs, load_scan_splits
 
 ensure_demo_dirs()
 
-SPLIT = {}
-for sp in ("train", "validation"):
-    p = os.path.join(ROOT, "3DSSG_subset", f"{sp}_scans.txt")
-    if os.path.exists(p):
-        with open(p) as fh:
-            for line in fh:
-                sid = line.strip().rstrip(",")
-                if sid:
-                    SPLIT[sid] = sp
+SPLIT = load_scan_splits()
 
 
 def _edge_key(e):

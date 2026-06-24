@@ -17,7 +17,7 @@ import mesh_instance as mi
 from renderer import FaceRenderer
 from paths import ROOT, DEMO_OVERLAYS, DEFAULT_SCANS, ensure_demo_dirs
 
-SCAN = DEFAULT_SCANS[0]
+SCAN = DEFAULT_SCANS[1]
 ensure_demo_dirs()
 
 

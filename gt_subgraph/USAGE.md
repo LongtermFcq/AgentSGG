@@ -501,6 +501,8 @@ OBJ 顶点顺序与 segIndices/PLY 不一致。不要用 trimesh 等会合并顶
 
 关系文件中的 instance id 在 `semseg.v2.json` 里找不到。检查 scan_id 是否匹配、是否读错了 split 的关系文件。
 
+若 `visualize_compare` 显示 temporal 边数远多于 split 标注（如 182 vs 24），常见原因是 **train scan 未被识别为 split**、回退读了 `relationships.json` 全量文件。检查 `train_scans.txt` 行尾是否有多余逗号；`run.py` 通过 `paths.load_scan_splits()` 解析（会自动 `rstrip(',')`）。修后需对该 scan **重跑 `run.py`**。
+
 ### Q4: overlay 与 RGB 完全错位
 
 常见原因：对 rescan 误用了 `3RScan.json` 的对齐变换。本模块应在 scan 原生坐标系内渲染。

@@ -16,18 +16,11 @@ import data_loader as dl
 import mesh_instance as mi
 import gt_builder as gb
 import output as op
-from paths import ROOT, GT_OUT, DEFAULT_SCANS, gt_json_path, ensure_gt_out
+from paths import ROOT, GT_OUT, DEFAULT_SCANS, gt_json_path, ensure_gt_out, load_scan_splits
 
 ensure_gt_out()
 
-# split lookup so we read relationships from the right file (and record split)
-SPLIT = {}
-for sp in ["train", "validation"]:
-    f = os.path.join(ROOT, "3DSSG_subset", f"{sp}_scans.txt")
-    if os.path.exists(f):
-        with open(f) as fh:
-            for line in fh:
-                SPLIT[line.strip()] = sp
+SPLIT = load_scan_splits()
 
 def id_check(scan_id, relationships, inst_ids, labels, renderable_ids=None):
     """Phase 0 step 6: endpoint coverage + readable spot-check.

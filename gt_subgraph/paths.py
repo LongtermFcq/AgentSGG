@@ -22,7 +22,7 @@ ROOT = os.path.join(PROJECT_ROOT, "3RScan")
 GT_OUT = os.path.join(GT_SUBGRAPH_DIR, "outputs", "gt")
 
 # Demo / sample-only artifacts
-DEMO_DIR = os.path.join(GT_SUBGRAPH_DIR, "demo")
+DEMO_DIR = os.path.join(GT_SUBGRAPH_DIR, "outputs", "demo")
 DEMO_OVERLAYS = os.path.join(DEMO_DIR, "overlays")
 DEMO_STATS = os.path.join(DEMO_DIR, "stats")
 DEMO_VIZ = os.path.join(DEMO_DIR, "viz")
@@ -47,3 +47,21 @@ def ensure_demo_dirs():
     os.makedirs(DEMO_OVERLAYS, exist_ok=True)
     os.makedirs(DEMO_STATS, exist_ok=True)
     os.makedirs(DEMO_VIZ, exist_ok=True)
+
+
+def load_scan_splits():
+    """Map scan_id -> 'train' | 'validation' from 3DSSG_subset/*_scans.txt.
+
+    Strips trailing commas (present in some 3DSSG split list files).
+    """
+    splits = {}
+    for sp in ("train", "validation"):
+        p = os.path.join(ROOT, "3DSSG_subset", f"{sp}_scans.txt")
+        if not os.path.exists(p):
+            continue
+        with open(p) as fh:
+            for line in fh:
+                sid = line.strip().rstrip(",")
+                if sid:
+                    splits[sid] = sp
+    return splits
