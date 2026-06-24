@@ -15,11 +15,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 import data_loader as dl
 import mesh_instance as mi
 from renderer import FaceRenderer
+from paths import ROOT, DEMO_OVERLAYS, DEFAULT_SCANS, ensure_demo_dirs
 
-ROOT = "/home/data16t1/fengchangqun/AgentSGG/3RScan"
-SCAN = "7272e16c-a01b-20f6-8961-a0927b4a7629"
-OUT = os.path.join("/home/data16t1/fengchangqun/AgentSGG", "gt_subgraph", "out")
-os.makedirs(OUT, exist_ok=True)
+SCAN = DEFAULT_SCANS[0]
+ensure_demo_dirs()
 
 
 def color_for(inst):
@@ -81,8 +80,8 @@ def main():
         for inst in vis:
             overlay[inst_buf == inst] = color_for(int(inst))
         blend = (0.5 * rgb + 0.5 * overlay).astype(np.uint8)
-        Image.fromarray(blend).save(os.path.join(OUT, f"overlay_{fid}.png"))
-    print(f"\nOverlays written to {OUT}")
+        Image.fromarray(blend).save(os.path.join(DEMO_OVERLAYS, f"overlay_{fid}.png"))
+    print(f"\nOverlays written to {DEMO_OVERLAYS}")
 
 
 if __name__ == "__main__":

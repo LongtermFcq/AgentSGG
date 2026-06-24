@@ -41,13 +41,17 @@
 | scan_id | 字符串 | 当前 scan 的唯一 ID |
 | num_processed_frames | 整数 | 实际成功处理并参与连续 t 编号的帧数 |
 | t_to_frame | 字典 | 连续 t 到原始 frame id 的映射 |
-| config | 字典 | 本次构建使用的阈值和开关 |
-| nodes | 字典 | key 是 instance id，value 是节点 label、commit_time、commit 原因和证据统计 |
+| config | 字典 | 本次构建使用的阈值和开关（含 `NODE_SCOPE`） |
+| rel_endpoint_ids | 整数列表 | 关系文件 subject/object 端点 id（`rel_endpoints` 时的静态白名单） |
+| nodes | 字典 | 已 commit 且通过 `NODE_SCOPE` 过滤的节点 |
 | edges | 列表 | 每条关系保留 subject、predicate、object、activation_time |
 | id_check | 字典 | 关系端点 ID 对齐检查和无几何端点记录 |
 | debug.uncommitted_renderable | 字典 | 有几何但最终未 commit 的实例诊断信息 |
+| debug.nodes_excluded_by_scope | 字典 | 已 commit 但因 `NODE_SCOPE=rel_endpoints` 未进入下游子图的实例 |
 
-样本 7272e16c 的一次输出结果如下：117 个有效处理帧，20 个可渲染节点全部 commit，11 条关系边全部激活，ID 缺失关系数为 0。
+**`NODE_SCOPE=rel_endpoints`（默认）**：`rel_endpoint_ids` 在构建时固定；每次 `materialize(t)` 只返回白名单内且 `commit_time <= t` 的节点——冗余节点在 **所有时刻** 均被排除，而非仅在最终时刻删除。Phase A 内部仍记录全部 commit 证据。
+
+样本 7272e16c 的一次输出结果如下：117 个有效处理帧；Phase A 20 个可渲染节点全部 commit；下游 `materialize(t=116)` 在默认 `rel_endpoints` 下为 **9 节点、11 边**（与 validation 标注一致）；11 条关系边全部激活，ID 缺失关系数为 0。
 
 ## 5. 一个具体样例如何流转
 

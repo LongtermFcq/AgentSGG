@@ -14,7 +14,9 @@ env/
 *.json
 *.js
 out/
+gt_subgraph/outputs/
+gt_subgraph/demo/
 3RScan/
 history/
-
+docs/
 

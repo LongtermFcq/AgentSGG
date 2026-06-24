@@ -3,7 +3,9 @@
 Usage:
   python run.py                      # default sample scans
   python run.py <scan_id> [<scan_id> ...]
+  python run.py --node-scope all_renderable <scan_id>
 """
+import argparse
 import os
 import sys
 import json
@@ -14,10 +16,9 @@ import data_loader as dl
 import mesh_instance as mi
 import gt_builder as gb
 import output as op
+from paths import ROOT, GT_OUT, DEFAULT_SCANS, gt_json_path, ensure_gt_out
 
-ROOT = "/home/data16t1/fengchangqun/AgentSGG/3RScan"
-OUT = os.path.join("/home/data16t1/fengchangqun/AgentSGG", "gt_subgraph", "out")
-os.makedirs(OUT, exist_ok=True)
+ensure_gt_out()
 
 # split lookup so we read relationships from the right file (and record split)
 SPLIT = {}
@@ -27,13 +28,6 @@ for sp in ["train", "validation"]:
         with open(f) as fh:
             for line in fh:
                 SPLIT[line.strip()] = sp
-
-DEFAULT_SCANS = [
-    "7272e16c-a01b-20f6-8961-a0927b4a7629",
-    "7272e161-a01b-20f6-8b5a-0b97efeb6545",
-    "f62fd5fd-9a3f-2f44-883a-1e5cf819608e",
-]
-
 
 def id_check(scan_id, relationships, inst_ids, labels, renderable_ids=None):
     """Phase 0 step 6: endpoint coverage + readable spot-check.
@@ -116,6 +110,7 @@ def run_scan(scan_id, cfg):
 
     relationships, rel_file = dl.load_relationships(ROOT, scan_id, split)
     print(f"  [rel] {len(relationships)} relations from {rel_file}")
+    rel_endpoint_ids = op.relationship_endpoint_ids(relationships)
     id_report = id_check(scan_id, relationships, inst_ids, labels, renderable_ids)
 
     # Phase A
@@ -146,8 +141,12 @@ def run_scan(scan_id, cfg):
                   f"filt_pixmin={d['filtered_by_pix_min_count']} "
                   f"filt_visratio={d['filtered_by_vis_ratio_count']}")
 
-    out = op.build_output(scan_id, res, edges, labels, cfg, id_report)
-    path = os.path.join(OUT, f"gt_{scan_id[:8]}.json")
+    out = op.build_output(scan_id, res, edges, labels, cfg, id_report, rel_endpoint_ids)
+    n_excluded = len(out["debug"].get("nodes_excluded_by_scope", {}))
+    if n_excluded:
+        print(f"  [output] NODE_SCOPE={cfg.NODE_SCOPE}: {len(out['nodes'])} nodes in JSON, "
+              f"{n_excluded} committed but excluded (see debug.nodes_excluded_by_scope)")
+    path = gt_json_path(scan_id)
     op.save(out, path)
 
     # validation: commit timeline + materialize sanity (edge never before endpoints)
@@ -170,12 +169,24 @@ def run_scan(scan_id, cfg):
 
 
 def main():
-    scans = sys.argv[1:] or DEFAULT_SCANS
-    cfg = gb.Config(TAU_INST_PIX_MIN=20, TAU_INST_VIS_RATIO=0.10, TAU_FACE_PIX=2,
-                    TAU_STRONG=0.6, TAU_COMMIT=0.4,
-                    ENABLE_PERSIST=True, K=3, TAU_PERSIST=0.10)
+    parser = argparse.ArgumentParser(description="Build GT subgraph JSON per scan")
+    parser.add_argument(
+        "--node-scope",
+        choices=op.NODE_SCOPES,
+        default=gb.NODE_SCOPE_REL_ENDPOINTS,
+        help="nodes in output JSON / materialize(): rel_endpoints (default) or all_renderable",
+    )
+    parser.add_argument("scans", nargs="*", default=DEFAULT_SCANS)
+    args = parser.parse_args()
+
+    cfg = gb.Config(
+        TAU_INST_PIX_MIN=20, TAU_INST_VIS_RATIO=0.10, TAU_FACE_PIX=2,
+        TAU_STRONG=0.6, TAU_COMMIT=0.4,
+        ENABLE_PERSIST=True, K=3, TAU_PERSIST=0.10,
+        NODE_SCOPE=args.node_scope,
+    )
     print("config:", cfg)
-    for sc in scans:
+    for sc in args.scans:
         run_scan(sc, cfg)
 
 

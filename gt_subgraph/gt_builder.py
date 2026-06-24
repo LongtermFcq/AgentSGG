@@ -33,6 +33,10 @@ except ImportError:  # script execution from gt_subgraph/
     from mesh_instance import BG
 
 
+NODE_SCOPE_ALL_RENDERABLE = "all_renderable"
+NODE_SCOPE_REL_ENDPOINTS = "rel_endpoints"
+
+
 @dataclass
 class Config:
     TAU_INST_PIX_MIN: int = 20       # tier1: very low absolute pixel floor (noise only)
@@ -43,6 +47,9 @@ class Config:
     ENABLE_PERSIST: bool = True      # persistent branch on (rescues weak-evidence small objects)
     K: int = 3                       # frames of recurrence required for persistent commit
     TAU_PERSIST: float = 0.10        # weak-evidence floor for persistent branch
+    # Downstream node set: all_renderable = every committed instance;
+    # rel_endpoints = only instances appearing in the loaded relationship file.
+    NODE_SCOPE: str = NODE_SCOPE_REL_ENDPOINTS
 
 
 def _init_debug():

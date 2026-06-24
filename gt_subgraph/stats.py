@@ -13,10 +13,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 import data_loader as dl
 import mesh_instance as mi
 import gt_builder as gb
+from paths import ROOT, DEMO_STATS, ensure_demo_dirs
 
-ROOT = "/home/data16t1/fengchangqun/AgentSGG/3RScan"
-OUT = os.path.join("/home/data16t1/fengchangqun/AgentSGG", "gt_subgraph", "out")
-os.makedirs(OUT, exist_ok=True)
+ensure_demo_dirs()
 
 
 def run(scan_id):
@@ -80,9 +79,9 @@ def run(scan_id):
     ax[3].hist(vis_ratio, bins=50); ax[3].set_title("vis_ratio (pix_vis/pix_full)")
     fig.suptitle(f"{scan_id}  ({len(total_area)} inst, {len(frames)} frames)")
     fig.tight_layout()
-    p = os.path.join(OUT, f"stats_{scan_id[:8]}.png")
+    p = os.path.join(DEMO_STATS, f"stats_{scan_id[:8]}.png")
     fig.savefig(p, dpi=90)
-    with open(os.path.join(OUT, f"stats_{scan_id[:8]}.json"), "w") as f:
+    with open(os.path.join(DEMO_STATS, f"stats_{scan_id[:8]}.json"), "w") as f:
         json.dump(report, f, indent=2)
     print("saved", p)
 
