@@ -143,24 +143,71 @@ def iter_frames(scan_dir):
             yield fid, pose
 
 
-def load_relationships(dataset_root, scan_id, split=None):
-    """Find this scan's relationship rows. Try the split file first if given,
-    else fall back to the full relationships.json. Returns list of
-    (subjectId, objectId, predId, predName)."""
-    ssg = os.path.join(dataset_root, "3DSSG_subset")
-    candidates = []
-    if split:
-        candidates.append(f"relationships_{split}.json")
-    candidates += ["relationships.json", "relationships_train.json",
-                   "relationships_validation.json", "relationships_test.json"]
-    for fn in candidates:
-        fp = os.path.join(ssg, fn)
-        if not os.path.exists(fp):
+def _dedup_rows(rows):
+    """Dedup exact 4-tuple rows while preserving order, direction and the
+    multiple predicates that may exist between the same (subj, obj) pair."""
+    seen = set()
+    out = []
+    for r in rows:
+        key = tuple(r)
+        if key in seen:
             continue
+        seen.add(key)
+        out.append(tuple(r))
+    return out
+
+
+def load_relationships(dataset_root, scan_id, split=None, source="full"):
+    """Find this scan's relationship rows. Returns
+    (rows, rel_file) where each row is (subjectId, objectId, predId, predName).
+
+    source:
+      "full"  (default) -- 3DSSG_subset/relationships.json: ONE entry per scan
+              holding the COMPLETE relation set (e.g. 525 rows for the sample
+              scan). This is what the GT builder should use.
+      "split" -- relationships_{split}.json: the benchmark splits each scene
+              into multiple <=9-object subgraphs, so a scan appears as several
+              entries. We AGGREGATE all of them (dedup) -- NOT just the first
+              one, which would silently drop ~95% of the relations.
+
+    `split` ('train'/'validation'/'test') only matters for source="split".
+    Whichever source is requested, we fall back to the other if the chosen file
+    has no rows for this scan, so a missing file never yields a silent empty.
+    """
+    ssg = os.path.join(dataset_root, "3DSSG_subset")
+
+    def from_full():
+        fp = os.path.join(ssg, "relationships.json")
+        if not os.path.exists(fp):
+            return None
         data = json.load(open(fp))
         for s in data["scans"]:
             if s["scan"] == scan_id:
-                return [tuple(r) for r in s["relationships"]], fn
+                return [tuple(r) for r in s["relationships"]], "relationships.json"
+        return None
+
+    def from_split():
+        files = []
+        if split:
+            files.append(f"relationships_{split}.json")
+        files += ["relationships_train.json", "relationships_validation.json",
+                  "relationships_test.json"]
+        for fn in files:
+            fp = os.path.join(ssg, fn)
+            if not os.path.exists(fp):
+                continue
+            data = json.load(open(fp))
+            rows = [r for s in data["scans"] if s["scan"] == scan_id
+                    for r in s["relationships"]]
+            if rows:
+                return _dedup_rows(rows), fn
+        return None
+
+    order = (from_full, from_split) if source == "full" else (from_split, from_full)
+    for getter in order:
+        res = getter()
+        if res is not None:
+            return res
     return [], None
 
 

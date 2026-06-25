@@ -101,7 +101,9 @@ def run_scan(scan_id, cfg):
         print(f"  [phase0] annotation-only (no mesh faces, never committable): "
               + ", ".join(f"{lbl}(id={oid},v={vc})" for oid, lbl, vc in annot_only))
 
-    relationships, rel_file = dl.load_relationships(ROOT, scan_id, split)
+    # Use the COMPLETE per-scan relation set (relationships.json), not the
+    # benchmark split subgraphs which only carry ~9 objects each.
+    relationships, rel_file = dl.load_relationships(ROOT, scan_id, split, source="full")
     print(f"  [rel] {len(relationships)} relations from {rel_file}")
     rel_endpoint_ids = op.relationship_endpoint_ids(relationships)
     id_report = id_check(scan_id, relationships, inst_ids, labels, renderable_ids)

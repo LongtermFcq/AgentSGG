@@ -43,17 +43,9 @@ def build_annotation_out(scan_id, rel_mode="split"):
       full   - relationships.json for this scan (complete per-scan graph)
     """
     scan_dir = os.path.join(ROOT, scan_id)
-    split = SPLIT.get(scan_id) if rel_mode == "split" else None
-    relationships, rel_file = dl.load_relationships(ROOT, scan_id, split)
-    if rel_mode == "full":
-        fp = os.path.join(ROOT, "3DSSG_subset", "relationships.json")
-        if os.path.exists(fp):
-            data = json.load(open(fp))
-            for s in data["scans"]:
-                if s["scan"] == scan_id:
-                    relationships = [tuple(r) for r in s["relationships"]]
-                    rel_file = "relationships.json"
-                    break
+    split = SPLIT.get(scan_id)
+    source = "full" if rel_mode == "full" else "split"
+    relationships, rel_file = dl.load_relationships(ROOT, scan_id, split, source=source)
 
     seg_to_instance, labels = dl.load_semseg(scan_dir)
     verts, faces = dl.load_mesh(scan_dir)
